@@ -23,7 +23,7 @@ click rings and zooms, and renders a 1080p MP4 at broadcast loudness.
 
 **Claude Code** (personal skill):
 ```bash
-git clone https://github.com/<you>/saas-training-videos ~/.claude/skills/saas-training-videos
+git clone https://github.com/jamoyex/saas-training-videos ~/.claude/skills/saas-training-videos
 ```
 Other agents: point them at `SKILL.md` (it links to everything else); the scripts are plain Python 3 / Node CLI tools.
 
