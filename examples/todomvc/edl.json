@@ -1,0 +1,30 @@
+{
+ "output": "out/todomvc_add-and-complete.mp4",
+ "loudnorm": true,
+ "segments": [
+  {
+   "id": "S01_ADD",
+   "type": "screen",
+   "video": "screen/tight/S01_ADD.mp4",
+   "audio": "vo/S01_ADD.mp3",
+   "cursor": {
+    "zooms": [
+     {"say": "I'll type", "offset": -0.4, "until_say": "tick the circle", "center": [960, 420], "zoom": 1.5},
+     {"say": "how many are still left", "offset": -0.4, "hold": 2.2, "center": [700, 660], "zoom": 1.6}
+    ]
+   },
+   "sync": [
+    {"t": 1.23, "say": "to-do app"},
+    {"t": 3.33, "say": "click into the box"},
+    {"t": 3.82, "say": "I'll type"},
+    {"t": 5.48, "say": "press Enter"},
+    {"t": 6.58, "say": "Send the invites"},
+    {"t": 9.52, "say": "order the cake"},
+    {"t": 13.60, "say": "tick the circle"},
+    {"t": 15.13, "say": "how many are still left"},
+    {"t": 17.40, "say": "Click Completed"},
+    {"t": 19.90, "say": "All, to see"}
+   ]
+  }
+ ]
+}

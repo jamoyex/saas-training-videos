@@ -1,0 +1,28 @@
+# media and build outputs (examples keep only steps, script, EDL)
+*.webm
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.m4a
+*.aiff
+*.frames.json
+*.pointer.json
+*.pointer.raw.json
+*.map.json
+*.words.json
+*.timing.json
+manifest.json
+.build/
+out/
+auditions/
+stills/
+# secrets and logins
+.env
+*.env
+!templates/config.example.env
+.training-video/
+# misc
+__pycache__/
+.DS_Store
+.playwright-cli/

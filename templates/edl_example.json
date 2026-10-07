@@ -1,0 +1,32 @@
+{
+ "output": "out/03_add-a-contact.mp4",
+ "loudnorm": true,
+ "cursor_ring": "#3B82F6",
+ "segments": [
+  {
+   "id": "S01_ADD",
+   "type": "screen",
+   "video": "screen/tight/S01_ADD.mp4",
+   "audio": "vo/S01_ADD.mp3",
+   "cursor": {
+    "zooms": [
+     {"say": "first name", "offset": -0.4, "until_say": "click Save", "center": [960, 520], "zoom": 1.4}
+    ]
+   },
+   "sync": [
+    {"t": 1.37, "say": "Click New contact"},
+    {"t": 4.10, "say": "first name"},
+    {"t": 7.85, "say": "their email"},
+    {"t": 11.20, "say": "Lifecycle stage"},
+    {"t": 13.05, "say": "pick Lead"},
+    {"t": 15.90, "say": "click Save"}
+   ]
+  },
+  {
+   "id": "S02_CLOSE",
+   "type": "image",
+   "image": "stills/s02_last_frame.png",
+   "audio": "vo/S02_CLOSE.mp3"
+  }
+ ]
+}
