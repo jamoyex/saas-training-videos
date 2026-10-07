@@ -1,59 +1,81 @@
 # saas-training-videos
 
-An agent skill for producing **narrated, screen-recorded training videos of any web app**: tutorials, how-tos,
-onboarding walkthroughs, feature demos. The agent drives a real browser through scripted takes, records only the page,
-narrates with the voice you choose, lands every click on the word that names it, draws a human-looking cursor with
-click rings and zooms, and renders a 1080p MP4 at broadcast loudness.
+An open, agent-agnostic skill for producing **narrated, screen-recorded training videos of any web app** — courses,
+tutorials, how-tos, onboarding walkthroughs — with **any AI agent**: ChatGPT / Codex, Claude, Gemini, Cursor, Copilot,
+Goose, Aider, your own framework, or a person following the steps.
 
 ![demo](docs/demo.gif)
 
-*From `examples/todomvc/`: scripted take, drawn cursor (arrow / I-beam / hand), zoom on the field being typed.*
+*From `examples/todomvc/`: a scripted take, a drawn cursor (arrow / I-beam / hand), a zoom on the field being typed.*
 
-## What's in it
+## What it does
 
-| Part | What it does |
-|---|---|
-| **Recorder** (`scripts/pw_record.py`) | Playwright CLI + real Chrome with a saved login per app. Takes are small JS files (`setup()` / `take()`) using human-paced helpers: `hover`, `click`, `type`, `press`, `smooth` scroll, `dismiss` popups, `clickAt`. 2560×1440 footage, a pointer log for the edit, automatic logging inside iframes, stray-mouse filtering, a fake microphone for voice/dictation features. Re-shooting after a UI change is one command. |
-| **Voices** (`scripts/voiceover.py`) | ElevenLabs (your clones, account voices, or the shared library, with expressive tags), OpenAI TTS, macOS `say`, or a human recording. `voices` to search, `audition` to compare candidates on the same words, `speak` per segment, `align` for audio without timings (local Whisper). |
-| **Editor** (`scripts/assemble_video.py` + `cursor_overlay.py`) | EDL-driven: phrase-anchored sync, real-speed footage with holds where the voice needs time, drawn cursor + click rings, phrase-timed zooms and gestures, stills, slides, presenter picture-in-picture, intro/outro and transition overlays, two-pass loudnorm to −16 LUFS. |
-| **QA tools** | `voice_gaps.py` (footage vs voice timing before rendering), `sync_tools.py` (did clicks land on their words), `contact_sheet.py`, `pointer_events.py`. |
-| **Method** (`SKILL.md`, `references/`) | The workflow and the rules learned the hard way: recording pitfalls, writing narration to be spoken, pacing with words instead of silence, voice selection, zoom coordinates, QA checklist. |
-
-## Install
-
-**Claude Code** (personal skill):
-```bash
-git clone https://github.com/jamoyex/saas-training-videos ~/.claude/skills/saas-training-videos
 ```
-Other agents: point them at `SKILL.md` (it links to everything else); the scripts are plain Python 3 / Node CLI tools.
+PLAN       course plan → per video: explore the real screens → brief
+SIGN IN    a human operator logs in once per account; the agent never handles credentials
+RECORD     scripted Playwright takes in real Chrome → tighten → click list
+WRITE      narration written to the footage, TTS-ready
+VOICE      audition → ElevenLabs v4 (soft breaths) / OpenAI TTS / human recording → gap check
+EDIT       click-to-word sync, drawn cursor + click rings, zooms → 1080p, −16 LUFS MP4
+QA         checklist → hand-off
+```
 
-Requirements: macOS or Linux, Python 3.10+ (`pip install numpy pillow`), ffmpeg, Google Chrome,
-`npm i -g @playwright/cli`. Optional: `whisper-cpp` + a ggml model (alignment), API keys for ElevenLabs/OpenAI
-(`templates/config.example.env`).
+| Part | Highlights |
+|---|---|
+| **Planning** (`references/planning.md`, `video-structure.md`, templates) | intake questions, course → modules → videos, briefs from a task analysis of the real app, pilot-first, review gates, LLM script drafting rules |
+| **Authenticated sessions** (`references/authentication.md`) | operator hand-off protocol (`login --until`, `status`), SSO, magic links, passkeys, CAPTCHAs, remote agents, account prep, security rules |
+| **Recorder** (`scripts/pw_record.py`) | one saved login per account; takes are small JS files with human-paced helpers (`hover`, `click`, `type`, `smooth` scroll, `dismiss` popups…); automatic logging inside iframes; stray-mouse filtering; fake microphone input |
+| **Human-like voice** (`references/human-voiceover.md`, `scripts/voiceover.py`) | ElevenLabs v4 settings that work, audio-tag usage (`[inhales]`, `[warmly]`…) and what to avoid, writing text for TTS, cloning with consent; voice search, side-by-side auditions, OpenAI TTS, macOS `say`, Whisper alignment for human narration |
+| **Editor** (`scripts/assemble_video.py`) | phrase-anchored sync, real-speed footage that holds where the voice needs time, drawn cursor, phrase-timed zooms and gestures, stills, slides, presenter PiP, intro/outro, transitions, two-pass loudnorm |
+| **QA** | `voice_gaps.py`, `sync_tools.py`, `contact_sheet.py`, `pointer_events.py`, and a checklist |
+
+## Install (pick your agent — details in [`docs/agents.md`](docs/agents.md))
+
+```bash
+# OpenAI Codex CLI
+git clone https://github.com/jamoyex/saas-training-videos ~/.codex/skills/saas-training-videos
+# Claude Code
+git clone https://github.com/jamoyex/saas-training-videos ~/.claude/skills/saas-training-videos
+# Anything that reads AGENTS.md (Cursor, Copilot, Gemini CLI via GEMINI.md, Goose, Aider, Jules…): clone into your project
+git clone https://github.com/jamoyex/saas-training-videos
+```
+**ChatGPT / Claude.ai skill uploads**: download `saas-training-videos.zip` from
+[Releases](https://github.com/jamoyex/saas-training-videos/releases) (or build it: `python3 scripts/package_skill.py`).
+Cloud chat assistants can plan, write the scripts/takes/EDLs and choose voices; recording runs on a machine with Chrome.
+
+Requirements for recording and rendering: macOS or Linux, Python 3.10+ (`pip install numpy pillow`), ffmpeg,
+Google Chrome, Node.js + `npm i -g @playwright/cli`, a display (Xvfb on servers). Optional: whisper.cpp,
+ElevenLabs / OpenAI keys (`templates/config.example.env`).
 
 ## Quick start
 
 ```bash
-S=~/.claude/skills/saas-training-videos/scripts
-python3 $S/pw_record.py login myapp https://app.example.com/login       # you sign in, once
+S=scripts   # inside the skill folder
+python3 $S/pw_record.py login myapp https://app.example.com/login --until "/dashboard"   # the operator signs in
 python3 $S/pw_record.py take  myapp screen/steps/S01.js screen/raw/S01.webm
-python3 $S/screen_capture.py tighten screen/raw/S01.webm screen/tight/S01.mp4 --fps 30 --keep 60 --log screen/raw/S01.pointer.json
+python3 $S/tighten.py screen/raw/S01.webm screen/tight/S01.mp4 --log screen/raw/S01.pointer.json
 python3 $S/pointer_events.py . S01                                       # click times → EDL anchors
 python3 $S/voiceover.py audition --voices VOICE_A VOICE_B --script script.md --seg S01
-python3 $S/voiceover.py speak script.md --voice VOICE_A --out vo
+python3 $S/voiceover.py speak script.md --voice VOICE_A --model eleven_v4 --stability 0.35 --speed 0.95 --out vo
 python3 $S/voice_gaps.py edl.json
 python3 $S/assemble_video.py edl.json
 ```
-A complete worked example (public demo app, no login): `examples/todomvc/`.
+A complete worked example (public demo app, no login): [`examples/todomvc/`](examples/todomvc/).
 
 ## Principles
 
+- Plan from the real screens; every label in the script matches the UI.
 - Footage plays at real speed and the audio is never cut: slow steps get room from a few more natural words.
 - Say it, then do it: each click lands just after its phrase.
-- The agent never types passwords, never buys, deletes or messages real people on camera, and records only the page.
-- Demo data only on screen; blur anything personal the app shows about the signed-in user.
-- Only clone or imitate a real person's voice with their consent.
+- A human operator owns the account: they sign in and approve changes; agents never handle credentials, never buy,
+  delete or message real people on camera, and record only the page.
+- Demo data only on screen; clone or imitate a real person's voice only with their consent.
+
+## Contributing
+
+See [`AGENTS.md`](AGENTS.md) (also the instructions coding agents read). Keep it agent-agnostic and dependency-light;
+test on `examples/todomvc` before opening a PR.
 
 ## License
 
-No license file yet — add one (e.g. MIT) if you want others to reuse it.
+[MIT](LICENSE)

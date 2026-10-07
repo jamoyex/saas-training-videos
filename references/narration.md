@@ -22,13 +22,9 @@ assembler's pacing report tell you where and roughly how many words. Re-voice on
 
 Dense pause tags (`[short pause]` everywhere) make a voice sound robotic; a stretch of padding words sounds human.
 
-## Audio tags (ElevenLabs v3/v4 only — stripped for other providers)
-Use few, and only where a person would:
-- `[inhales]` — a soft breath before a new thought or section (~one every 20–30 s). Prefer it to `[exhales]`, which
-  can come out as a loud sigh.
-- `[pause]` — only where words don't fit.
-- `[warmly]` on the sign-off, `[excited]` before a "and that's it!" moment.
-Check with a local transcript (Whisper) that no tag was read aloud.
+## Making it sound human
+Tags (`[inhales]`, `[pause]`, `[warmly]`), punctuation-as-breath, number/acronym spelling, pronunciations and voice
+settings: `human-voiceover.md`. Structure of the video (open → steps → recap → close): `video-structure.md`.
 
 ## Template
 `templates/script_template.md`: a header comment (app, account, what the takes change), then one block per segment:

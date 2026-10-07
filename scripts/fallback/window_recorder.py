@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
-"""Record the Chrome page area (macOS) while Claude drives the browser: start/stop per segment.
-FALLBACK recorder (Claude in Chrome). The default recorder is pw_record.py (Playwright CLI); `tighten` below is used for
-every take, whichever recorder made it.
+"""FALLBACK recorder (macOS): record the user's own Chrome window while an agent drives it through a browser extension
+(e.g. Claude in Chrome, or any agent that controls the user's Chrome). Use it only when the Playwright recorder
+(../pw_record.py) can't be used: a site that refuses automated browsers, a login that won't work in a separate profile.
 
-  python3 screen_capture.py start screen/S03_ADD.mp4     # records in the background (crop = Chrome viewport)
-  python3 screen_capture.py stop                         # finalises the file
-  python3 screen_capture.py tighten screen/S03_ADD.mp4 screen/S03_ADD_tight.mp4   # drop idle frames (Claude's think time)
-  python3 screen_capture.py probe                        # print the detected screen device, scale and crop
-  python3 screen_capture.py overlays screen/S03_ADD.mp4  # QA: Claude orange, shrunk page, window-title timeline
+  python3 window_recorder.py fit                          # size + park the Chrome window so the page area is 16:9
+  python3 window_recorder.py start screen/S03_ADD.mp4     # records in the background (crop = Chrome viewport)
+  python3 window_recorder.py stop                         # finalises the file
+  python3 window_recorder.py probe                        # print the detected screen device, scale and crop
+  python3 window_recorder.py overlays screen/S03_ADD.mp4 [--preset claude-in-chrome]   # QA: agent overlays leaked,
+                                                          #   shrunk page, window-title timeline
+Then tighten as usual (../tighten.py; the agent's think time between steps is cut there).
 Window mode keeps the native Retina crop (--res native, e.g. 2410x1356) so zooms in the edit stay sharp, and writes
 <out>.frames.json (capture time of every frame, crop geometry, window titles); `tighten` writes <dst>.map.json. Keep both:
 cursor_overlay.py and the assembler's "cursor" step map the page's pointer log through them.
 
 How the crop is found: the front Chrome window's bounds (AppleScript) minus the browser chrome height
 (--ui, default 143 pt = tabs + toolbar), then scaled by the Retina factor, then inset by --margin px (a safety net
-for the Claude-in-Chrome activity glow; recording_mode.js is what actually hides it), then trimmed to 16:9. Size the window first so the viewport is ~16:9
-— run `screen_capture.py fit` first: it sizes the window so the cropped area is exactly 16:9 with nothing
+for an agent extension's activity glow; recording_mode.js is what actually hides it), then trimmed to 16:9. Size the window first so the viewport is ~16:9
+— run `window_recorder.py fit` first: it sizes the window so the cropped area is exactly 16:9 with nothing
 cut on the right (on a 1512x982 display → 1218x851 window, 1218x708 viewport).
 Default --mode window: frames are grabbed from the Chrome WINDOW itself (Quartz CGWindowListCreateImage), so other
-apps on top of Chrome (e.g. the Claude app the user is watching) do NOT end up in the recording. --mode screen uses
+apps on top of Chrome (e.g. the agent's own app the user is watching) do NOT end up in the recording. --mode screen uses
 ffmpeg/avfoundation on the whole display instead (only if window mode is unavailable; then Chrome must stay in front).
 IMPORTANT: Chrome must not be COMPLETELY covered by another window, or it stops painting (frozen frames, hanging
-screenshots). `fit` parks Chrome flush with the screen bottom so it peeks out below a maximised Claude window.
-The real macOS cursor is never in window mode. Claude in Chrome draws its own on-page pointer, orange and glowing, plus an
-orange edge glow and a "Stop Claude" button. Inject scripts/recording_mode.js (javascript_tool) before `start` and after
-every page load: it hides all of these, the pointer included, and logs the pointer so the edit can draw a human cursor.
+screenshots). `fit` parks Chrome flush with the screen bottom so it peeks out below a maximised agent window.
+The real macOS cursor is never in window mode. Agent extensions often draw their own on-page pointer, edge glow and stop
+button (Claude in Chrome: orange). Inject recording_mode.js (the extension's run-JavaScript tool) before `start` and after
+every page load, with the PRESET for your extension: it hides those overlays, the pointer included, and logs the pointer
+so the edit can draw a human cursor.
 The terminal/app needs macOS Screen Recording permission. The user grants it; never change system settings yourself.
 """
 import argparse
@@ -37,7 +40,7 @@ import sys
 import time
 from pathlib import Path
 
-STATE = Path(os.environ.get("TMPDIR", "/tmp")) / "bb_screen_capture.json"
+STATE = Path(os.environ.get("TMPDIR", "/tmp")) / "tv_window_recorder.json"
 
 
 def osa(script):
@@ -73,7 +76,7 @@ def geometry(a):
 
 def cmd_fit(a):
     """Size the front Chrome window so the cropped page area is exactly 16:9, and park it flush with the BOTTOM of
-    the screen. Other apps (e.g. a maximised Claude window) usually stop above the Dock area, so a strip of Chrome
+    the screen. Other apps (e.g. a maximised agent window) usually stop above the Dock area, so a strip of Chrome
     stays visible. That matters: macOS marks a fully covered window as occluded and Chrome then STOPS PAINTING
     (window capture freezes and CDP screenshots hang). Keep at least a few points of Chrome uncovered while recording."""
     desk = [int(x) for x in osa('tell application "Finder" to get bounds of window of desktop').split(", ")]
@@ -125,7 +128,7 @@ def cmd_run_window(a):
     stop = {"now": False}
     signal.signal(signal.SIGINT, lambda *_: stop.update(now=True))
     signal.signal(signal.SIGTERM, lambda *_: stop.update(now=True))
-    # Chrome shows a '"Claude" started debugging this browser' info bar only while Claude's commands run; it pushes the
+    # Chrome shows a '"<extension>" started debugging this browser' info bar only while the agent's commands run; it pushes the
     # page down ~56 pt. Frames WITHOUT the bar are idle time AND have a different layout, so they are skipped
     # (the clock is paused), keeping every recorded frame's layout identical. --keep-idle disables this.
     probe_y = a.bar_probe_y
@@ -251,85 +254,15 @@ def cmd_stop(a):
     print(f"saved {st['out']} ({dur}s)")
 
 
-def freeze_intervals(src, min_still, noise):
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", src, "-vf", f"freezedetect=n={noise}:d={min_still}", "-map", "0:v",
-                        "-f", "null", "-"], capture_output=True, text=True)
-    starts = [float(x) for x in re.findall(r"freeze_start: ([\d.]+)", r.stderr)]
-    ends = [float(x) for x in re.findall(r"freeze_end: ([\d.]+)", r.stderr)]
-    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src],
-                               capture_output=True, text=True).stdout.strip() or 0)
-    while len(ends) < len(starts):
-        ends.append(dur)
-    return list(zip(starts, ends)), dur
-
-
-def cmd_tighten(a):
-    """Cut every still stretch longer than --keep down to --keep seconds (half before, half after the cut).
-    Also accepts --cut A-B ranges (seconds) to remove mistakes. With --log (the take's pointer log) it also cuts the
-    idle lead-in and tail: everything before the first pointer event − --lead s and after the last one + --tail s.
-    Output is silent (narration comes later)."""
-    src, dst = a.src, a.dst
-    iv, dur = freeze_intervals(src, a.keep, a.noise)
-    cuts = []
-    if a.log:
-        fr = json.loads(Path(src + ".frames.json").read_text())
-        wall = fr["t"]
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from cursor_overlay import load_log
-        evs = [e["t"] / 1000 for e in load_log(a.log) if wall[0] <= e["t"] / 1000 <= wall[-1]]
-        if evs:
-            first = next(i for i, w in enumerate(wall) if w >= min(evs)) / fr["fps"]
-            last = next(i for i, w in enumerate(wall) if w >= max(evs)) / fr["fps"]
-            if first - a.lead > 0.05:
-                cuts.append((0.0, first - a.lead))
-            if dur - (last + a.tail) > 0.05:
-                cuts.append((last + a.tail, dur))
-    for s0, e0 in iv:
-        if e0 - s0 > a.keep:
-            cuts.append((s0 + a.keep / 2, e0 - a.keep / 2))
-    for c in a.cut or []:
-        x, y = [float(v) for v in c.split("-")]
-        cuts.append((x, y))
-    cuts.sort()
-    merged = []
-    for c in cuts:
-        if merged and c[0] <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], c[1]))
-        else:
-            merged.append(c)
-    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
-                            "stream=r_frame_rate,nb_read_frames", "-of", "csv=p=0", src], capture_output=True, text=True)
-    rate, nframes = probe.stdout.strip().split(",")[:2]
-    num, den = (int(v) for v in rate.split("/"))
-    src_fps = num / den
-    if merged:
-        expr = "+".join(f"between(t,{x:.3f},{y:.3f})" for x, y in merged)
-        # restamp the kept frames at the SOURCE rate (real-time speed); -r then resamples to the output rate.
-        # (Before 2026-09-30 this used the output rate, so 20 fps recordings played 1.5× fast once anything was cut.)
-        vf = f"select='not({expr})',setpts=N/({src_fps:g}*TB)"
-    else:
-        vf = "null"
-    script = Path(dst).with_suffix(".vf.txt")
-    script.write_text(vf)
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-filter_script:v", str(script),
-                    "-an", "-r", str(a.fps), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", dst],
-                   check=True)
-    script.unlink()
-    d1 = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", dst],
-                        capture_output=True, text=True).stdout.strip()
-    # <dst>.map.json: the source time shown in every output frame (cursor_overlay.py maps pointer events through it)
-    kept = [k / src_fps for k in range(int(nframes)) if not any(x <= k / src_fps <= y for x, y in merged)]
-    n_out = int(round(float(d1) * a.fps))
-    Path(dst + ".map.json").write_text(json.dumps({"src": str(Path(src).resolve()), "fps": a.fps, "t": [
-        round(kept[min(len(kept) - 1, int(round(i / a.fps * src_fps)))], 4) for i in range(n_out)]}))
-    removed = sum(y - x for x, y in merged)
-    print(f"{src} {dur:.1f}s → {dst} {d1}s  (removed {removed:.1f}s in {len(merged)} cuts)")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tighten import cmd_tighten  # noqa: E402  (kept as a subcommand for convenience)
 
 
 def cmd_overlays(a):
-    """QA: list the times where Claude in Chrome's overlays leaked into a clip (recording mode was off, or a page load
-    dropped it): the orange pointer (an arrow-sized orange blob; orange UI that never moves, e.g. icons, is ignored) and
-    the orange edge glow (a warm tint along 2+ frame edges). Exits 1 if anything is found."""
+    """QA: a shrunk page (a mid-take screenshot left the tab in a bigger emulated viewport), the window-title timeline
+    (another tab or app on screen), and with --preset claude-in-chrome the extension's overlays leaking in (recording mode
+    off, or a page load dropped it): the orange pointer (an arrow-sized orange blob; orange UI that never moves, e.g.
+    icons, is ignored) and the orange edge glow (a warm tint along 2+ frame edges). Exits 1 if anything is found."""
     import numpy as np
     from scipy import ndimage
     dims = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
@@ -353,7 +286,7 @@ def cmd_overlays(a):
         pairs = [(rb[e, :], rb[d, :]), (rb[-1 - e, :], rb[-1 - d, :]), (rb[:, e], rb[:, d]), (rb[:, -1 - e], rb[:, -1 - d])]
         mid = lambda v: np.median(v[len(v) // 10: -len(v) // 10])
         glow.append(sum(mid(o) - mid(i) > 12 for o, i in pairs) >= 2)
-        # shrunk page: a Claude screenshot left the tab in a bigger emulated viewport, so the window shows the page
+        # shrunk page: an agent screenshot left the tab in a bigger emulated viewport, so the window shows the page
         # scaled down into the top-left corner with an empty band down the right side and along the bottom
         g = f[::8, ::8].mean(axis=2)
         gh, gw = g.shape
@@ -366,7 +299,7 @@ def cmd_overlays(a):
     for m in masks:
         count += unpack(m)
     static = count > 0.9 * len(masks)
-    # Claude's pointer at 1080p: ~28×40 px, its #D97757 outline blended with the cream fill → median blue ≈ 110.
+    # Claude in Chrome's pointer at 1080p: ~28×40 px, its #D97757 outline blended with the cream fill → median blue ≈ 110.
     # App oranges (icons, badges, avatars) are far less blue (< 70), so they don't count even when they aren't static.
     pointer = []
     for m, vals in zip(masks, blues):
@@ -388,6 +321,8 @@ def cmd_overlays(a):
                 out.append([t, t])
         return ", ".join(f"{s:.1f}-{e + 1 / a.fps:.1f}s" for s, e in out)
 
+    if a.preset != "claude-in-chrome":          # orange checks only make sense for that extension's overlays
+        pointer, glow = [False] * len(pointer), [False] * len(glow)
     n_p, n_g, n_s = sum(pointer), sum(glow), sum(shrunk)
     print(f"{a.src}: {len(masks)} frames checked at {a.fps:g} fps")
     print(f"  orange pointer: {n_p} frames" + (f"  ({ranges(pointer)})" if n_p else ""))
@@ -398,7 +333,7 @@ def cmd_overlays(a):
         print("  window title:   " + "  →  ".join(f"{t:.1f}s {name[:60]!r}" for t, name in titles)
               + ("   ← check: every title should be the page you recorded" if len({n for _, n in titles}) > 1 else ""))
     if n_p or n_g:
-        print("  → recording mode was off there: re-shoot those steps with scripts/recording_mode.js injected")
+        print("  → recording mode was off there: re-shoot those steps with recording_mode.js injected")
     if n_s:
         print("  → a screenshot during the take shrank the page: cut those ranges or re-shoot without mid-take screenshots")
     if n_p or n_g or n_s:
@@ -436,14 +371,14 @@ def main():
         s.add_argument("--ui", type=int, default=143, help="Chrome UI height in points above the page")
         s.add_argument("--margin", type=int, default=12, help="left/right inset (px), backup for the activity glow")
         s.add_argument("--margin-top", type=int, default=16, help="top inset (px), backup for the glow")
-        s.add_argument("--margin-bottom", type=int, default=44, help="bottom inset (px), backup for the glow and 'Stop Claude' button")
+        s.add_argument("--margin-bottom", type=int, default=44, help="bottom inset (px), backup for an agent's glow / stop button")
         s.add_argument("--scale", type=int, default=2, help="Retina factor")
         s.add_argument("--fps", type=int, default=20)
         s.add_argument("--cursor", action="store_true", help="show the real macOS cursor")
         s.add_argument("--bottom-gap", type=int, default=98, help="(fit) points left free at the screen bottom (Dock)")
         s.add_argument("--mode", choices=["window", "screen"], default="window")
         s.add_argument("--title", default="", help="(window mode) part of the Chrome window title to pick")
-        s.add_argument("--keep-idle", action="store_true", help="(window mode) keep frames while Claude is idle")
+        s.add_argument("--keep-idle", action="store_true", help="(window mode) keep frames while the agent is idle")
         s.add_argument("--res", choices=["native", "1080"], default="native",
                        help="(window mode) native = keep the Retina crop (e.g. 2410x1356) so zooms stay sharp")
     r = sub.add_parser("_run_window")
@@ -462,7 +397,7 @@ def main():
     t = sub.add_parser("tighten")
     t.add_argument("src")
     t.add_argument("dst")
-    t.add_argument("--keep", type=float, default=0.8, help="max seconds of any still stretch to keep")
+    t.add_argument("--keep", type=float, default=60, help="max seconds of any still stretch to keep")
     t.add_argument("--noise", type=float, default=0.001, help="freezedetect noise tolerance")
     t.add_argument("--cut", nargs="*", help="extra ranges to remove, e.g. 12.5-18.0")
     t.add_argument("--fps", type=int, default=30)
@@ -472,6 +407,7 @@ def main():
     o = sub.add_parser("overlays")
     o.add_argument("src")
     o.add_argument("--fps", type=float, default=2, help="frames per second to check")
+    o.add_argument("--preset", default="none", help="agent extension whose overlays to look for: claude-in-chrome | none")
     a = ap.parse_args()
     {"probe": cmd_probe, "fit": cmd_fit, "start": cmd_start, "_run_window": cmd_run_window, "stop": cmd_stop,
      "tighten": cmd_tighten, "overlays": cmd_overlays}[a.cmd](a)

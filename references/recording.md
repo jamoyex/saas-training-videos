@@ -14,8 +14,11 @@ python3 scripts/pw_record.py close acme
 - One **profile per app account** (`acme`, `acme-admin`, `billing-sandbox`). The login lives in
   `$TRAINING_VIDEO_HOME/pw-<profile>/` (default `~/.training-video/`). That folder *is* the session: never copy it into
   a project, never commit it. `pw_record.py cli <profile> delete-data` (or deleting the folder) logs out.
-- **The agent never types passwords or 2FA codes.** `login` opens the page and waits; the user signs in, switches to
-  the demo workspace, and says when done. If a take lands on a sign-in page later, the session expired: `login` again.
+- **A human operator signs in; the agent never types passwords or 2FA codes.** `login` opens the page and waits
+  (`--until "/dashboard"` waits for the URL); the operator signs in, switches to the demo workspace, and says when
+  done; `pw_record.py status <profile>` confirms where the browser is. If a take lands on a sign-in page later, the
+  session expired: `login` again. Full protocol (SSO, magic links, passkeys, CAPTCHAs, remote agents, account prep):
+  `authentication.md`.
 - `open` options: `--viewport 1440x900` (default 1280x720), `--scale 2` (footage = viewport × scale), and
   `--fake-mic caller.wav` (the page hears that WAV as microphone input: test calls to voice agents, dictation, meeting
   apps). Changing options means re-opening (the recorder closes and reopens the session).
@@ -83,7 +86,7 @@ target inside a frame and write the log entry themselves (page coordinates, curs
 
 ```
 python3 scripts/contact_sheet.py screen/raw/S03_ADD.webm --every 2 --out sheet.jpg        # look before moving on
-python3 scripts/screen_capture.py tighten screen/raw/S03_ADD.webm screen/tight/S03_ADD.mp4 --fps 30 --keep 60 \
+python3 scripts/tighten.py screen/raw/S03_ADD.webm screen/tight/S03_ADD.mp4 \
         --log screen/raw/S03_ADD.pointer.json [--cut 12.4-27.9]
 python3 scripts/pointer_events.py . S03_ADD                                                 # click times, tight timeline
 ```
@@ -126,5 +129,5 @@ page loads and long spinners — only where no pointer event falls inside the ra
     and rebuild the segment. Keep the original log next to it.
 14. **Paid steps** (buying a number, upgrading a plan, sending to real recipients): film up to the confirm button and
     narrate the rest. Some purchases also trigger identity checks the agent must never complete.
-15. **The fallback recorder** (`screen_capture.py start/stop` + `recording_mode.js`, macOS, for apps that refuse automated
-    browsers) records the user's real Chrome window via a browser extension; see its docstring. Prefer Playwright.
+15. **The fallback recorder** (`scripts/fallback/window_recorder.py` + `recording_mode.js`, macOS) is for agents that drive the
+    user's real Chrome through an extension, or apps that refuse automated browsers; see its docstring. Prefer Playwright.

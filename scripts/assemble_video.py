@@ -41,7 +41,7 @@ Segment keys
             after its phrase starts, ≥1.2 s per step across a comma/full stop, a beat after the last one. The AUDIO IS
             NEVER EDITED: where the voice leaves too little room, the screen holds and the assembler prints where to add
             a few words (or a pause) to the script. false = legacy.
-  cursor    (screen) draw the Mac cursor, presenter gestures and zooms after the sync, in narration time (Claude-driven
+  cursor    (screen) draw the Mac cursor, presenter gestures and zooms after the sync, in narration time (agent-driven
             footage has no pointer). true, or {"log": <pointer.json, default found via the clip's timing files>,
             "gestures": [...] | "file.json", "zooms": [...] | "file.json", "size": 1.5, "ring": "#3B82F6"}; gestures and
             zooms can be timed by phrase ("say"/"offset", "until_say" or "hold"). Positions/centers are VIDEO px

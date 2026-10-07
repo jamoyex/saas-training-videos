@@ -34,7 +34,7 @@ Use a real segment with clicks in it (not a pangram). Give the user the files to
 (voice id, model, settings) in the project's notes. For style choices (breathing, pauses), audition variants of the
 same passage too: e.g. no tags / `[exhales]` / soft `[inhales]` — let the listener decide.
 
-## 3. Settings that matter
+## 3. Settings that matter (details and the reasons: `human-voiceover.md`)
 - **ElevenLabs**: model `eleven_v4` (default; `--model eleven_v3` / `eleven_multilingual_v2`), `--stability 0.3–0.4` for a
   natural, expressive read (higher = flatter, steadier), `--speed 0.9–1.0` (slower than 0.9 sounds artificial),
   similarity 0.8, style 0.2. The script passes the previous/next segment text so the delivery flows across segments.

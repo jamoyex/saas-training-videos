@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Record SaaS walkthrough takes with the Playwright CLI: scripted, repeatable, pointer-logged screen footage.
 
-  python3 pw_record.py login  <profile> <url>                      # visible Chrome; the USER logs in (once per profile)
+  python3 pw_record.py login  <profile> <url> [--until "/dashboard"]  # visible Chrome; the HUMAN signs in (once per profile)
+  python3 pw_record.py status <profile>                            # where the browser is (URL + title), e.g. after login
   python3 pw_record.py open   <profile> [<url>] [--viewport 1280x720] [--scale 2] [--fake-mic caller.wav]
   python3 pw_record.py take   <profile> steps/S03_ADD.js screen/raw/S03_ADD.webm   # one take → webm + timing sidecars
   python3 pw_record.py cli    <profile> snapshot | screenshot --filename=/abs/x.png | eval "() => document.title" | reload …
@@ -29,14 +30,16 @@ A take writes, next to the clip:
   <clip>.webm               the footage (viewport × scale, 30 fps, no pointer)
   <clip>.webm.frames.json   wall-clock time of every frame + geometry (tighten / cursor_overlay / assembler)
   <clip>.pointer.json       the pointer log (the edit draws the cursor from it)
-Next: screen_capture.py tighten <clip>.webm tight/<id>.mp4 --fps 30 --keep 60 --log <clip>.pointer.json
+Next: tighten.py <clip>.webm tight/<id>.mp4 --log <clip>.pointer.json
 """
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HOME = Path(os.environ.get("TRAINING_VIDEO_HOME", Path.home() / ".training-video"))
@@ -190,9 +193,43 @@ def cmd_open(a, login=False):
     args = ["open"] + ([a.url] if a.url else []) + ["--headed", f"--config={cfg}"]
     rc = cli(a.profile, *args)
     if login:
-        print(f"\nA Chrome window is open at {a.url}. Ask the user to sign in there (and enter any security code),\n"
-              f"switch to the demo workspace, and tell you when done. Never type the password yourself.")
+        print(f"\nA Chrome window is open at {a.url} (profile {a.profile!r}). HUMAN OPERATOR: sign in there yourself\n"
+              f"(password, 2FA/passkey, SSO, CAPTCHA), switch to the demo workspace/account, close any welcome popups,\n"
+              f"and leave the window open. The agent never types or sees credentials.")
+        if getattr(a, "until", None):
+            print(f"Waiting for the browser to reach a URL containing {a.until!r} …", flush=True)
+            return wait_until(a.profile, a.until, a.timeout)
+        print("Then tell the agent you're done; it confirms with: pw_record.py status " + a.profile)
     return rc
+
+
+def page_info(profile):
+    r = cli(profile, "eval", "() => JSON.stringify({url: location.href, title: document.title})", capture=True)
+    m = re.search(r'\{\\?"url.*?\}', r.stdout.replace('\\"', '"'))
+    try:
+        return json.loads(m.group(0).replace('\\"', '"')) if m else None
+    except json.JSONDecodeError:
+        return None
+
+
+def cmd_status(a):
+    info = page_info(a.profile)
+    if not info:
+        sys.exit(f"no open browser for profile {a.profile!r} (run: pw_record.py open {a.profile} <url>)")
+    print(f"{a.profile}: {info['title']!r}  {info['url'].split('?')[0]}")
+
+
+def wait_until(profile, needle, timeout):
+    """poll the page URL until it contains `needle` (the human finished signing in), up to `timeout` s"""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        info = page_info(profile)
+        if info and needle in info["url"]:
+            print(f"signed in: now on {info['url'].split('?')[0]} ({info['title']!r})")
+            return 0
+        time.sleep(3)
+    print(f"timed out after {timeout}s waiting for a URL containing {needle!r}; ask the operator what they see")
+    return 1
 
 
 def cmd_take(a):
@@ -239,7 +276,7 @@ def cmd_take(a):
     for p in problems:
         print("  ⚠ " + p)
     print("  QA: clean" if not problems else "  → fix and re-shoot this take (or record a continuation take, if it already changed data)")
-    print(f"next: screen_capture.py tighten {a.out} <tight>.mp4 --fps 30 --keep 60 --log {out.with_suffix('.pointer.json')}")
+    print(f"next: tighten.py {a.out} <tight>.mp4 --log {out.with_suffix('.pointer.json')}")
     return 1 if problems else 0
 
 
@@ -287,9 +324,13 @@ def main():
         s.add_argument("--viewport", default=f"{VIEWPORT[0]}x{VIEWPORT[1]}", help="page size in CSS px (default 1280x720)")
         s.add_argument("--scale", type=float, default=DSF, help="device scale factor (default 2 → 2560x1440 footage)")
         s.add_argument("--fake-mic", help="WAV/Y4M the page receives as microphone input (test calls, dictation)")
+        if name == "login":
+            s.add_argument("--until", help="wait until the page URL contains this (e.g. /dashboard): signed in")
+            s.add_argument("--timeout", type=int, default=600, help="(--until) seconds to wait (default 600)")
     s = sub.add_parser("take"); s.add_argument("profile"); s.add_argument("steps"); s.add_argument("out")
     s.add_argument("--fps", type=int, default=FPS)
     s = sub.add_parser("close"); s.add_argument("profile")
+    s = sub.add_parser("status"); s.add_argument("profile")
     s = sub.add_parser("cli"); s.add_argument("profile"); s.add_argument("args", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     if a.cmd == "login":
@@ -300,6 +341,8 @@ def main():
         sys.exit(cmd_take(a))
     if a.cmd == "close":
         sys.exit(cli(a.profile, "close"))
+    if a.cmd == "status":
+        sys.exit(cmd_status(a))
     sys.exit(cli(a.profile, *a.args))
 
 

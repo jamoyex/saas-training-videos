@@ -4,9 +4,9 @@
   python3 cursor_overlay.py screen/tight/S03_ADD.mp4 --log screen/raw/S03_ADD.pointer.json --out screen/cursor/S03_ADD.mp4
 
 Record with scripts/pw_record.py (the default: it writes <name>.pointer.json and <clip>.frames.json itself) or, with the
-browser-extension fallback, with scripts/recording_mode.js set to CURSOR = "hidden" (save its sessionStorage "tv-pointer-log"
+browser-extension fallback, with scripts/fallback/recording_mode.js set to CURSOR = "hidden" (save its sessionStorage "tv-pointer-log"
 next to the raw clip as <name>.pointer.json). Either way the footage has no pointer at all.
-The clip can be the raw recording or a `screen_capture.py tighten` output. The timing sidecars the recorder writes
+The clip can be the raw recording or a `tighten.py` output. The timing sidecars the recorder writes
 place every logged event on the right frame: <raw>.frames.json (wall-clock time of every raw frame + crop geometry)
 and, for a tightened clip, <tight>.map.json (the raw time shown in every tight frame).
 

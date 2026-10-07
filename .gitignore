@@ -26,3 +26,4 @@ stills/
 __pycache__/
 .DS_Store
 .playwright-cli/
+dist/
